@@ -22,13 +22,20 @@ namespace fs = std::filesystem;
 //
 // struct stores the date of data, confirmed cases, deaths, recovered cases
 //
-struct countryData {
+class countryData {
+public:
     string date;
     int numCases;
     int numDeaths;
     int numRecovered;
-};
 
+    countryData() {
+        date="";
+        numCases=0;
+        numDeaths=0;
+        numRecovered=0;
+    }
+};
 
 // ---------------------------------------------------------------------\\
 // ------------------------ HELPER FUNCTIONS--------------------------- ||
@@ -145,12 +152,13 @@ void formatDate(string &curDate, string last_update) {
 //
 void insertData(string currFile, map<string, stack<countryData>> &data) {
     ifstream file;
+    map<int, string> columnsPositions;  // stores (column position, column name). helps organize columns
+    map<string, string> curVal;            // stores (column, current value)  ex. curVal["Country"] = "USA" 
     string province, country, last_update, confirmed, deaths, recovered;
     string curDate = "";
-    string line;
+    string line, token, val;
+    int indexCounter;                   // helps determine index of column in loop
 
-
-    // cout << "Reading file: " << currFile << endl;
 
     file.open(currFile);            // OPEN FIRST FILE JUST FOR TESTING
     if (!file.is_open()) {
@@ -158,41 +166,65 @@ void insertData(string currFile, map<string, stack<countryData>> &data) {
         exit(-1);
     }
 
+    // first line goes into stream
+    getline(file, line);                    
+    stringstream stream(line);
 
-    getline(file, line);                    // discard first line
+    // parse the first line, which are the labels for what each column in the csv file is
+    indexCounter = 0;
+    while (getline(stream, token, ',')) {
+        // assign each index one of our 6 columns 
+        if (token.find("Province") != token.npos)           // if found desired token
+            columnsPositions[indexCounter] = "Province";        // map index to token
+        else if (token.find("Country") != token.npos)       // ...
+            columnsPositions[indexCounter] = "Country";         // ...
+        else if (token.find("Update") != token.npos)            
+            columnsPositions[indexCounter] = "Last_Update";
+        else if (token.find("Confirmed") != token.npos)
+            columnsPositions[indexCounter] = "Confirmed";
+        else if (token.find("Deaths") != token.npos)
+            columnsPositions[indexCounter] = "Deaths";
+        else if (token.find("Recovered") != token.npos)
+            columnsPositions[indexCounter] = "Recovered";
+        else
+            cout << "  did not match: " << token << endl;
+        indexCounter++;
+    }
+    
+    cout << "\n------------------------------------------------------------\n";
+    cout << "Reading file: " << currFile << "\n Label:  " << line << endl;
+    cout << "------------------------------------------------------------\n\n";
 
-    cout << "Reading file: " << currFile << ". Label:  " << line << endl;
+    
 
-
-    while (getline(file, line)) {
-
-        // parse line appropriately, if province is actually a city/state
-        if (line[0] == '"') {               
-            line.erase(0, 1);
-            size_t pos = line.find(',');
-            line.erase(pos, 1);
-            pos = line.find('"');
-            line.erase(pos, 1);
-        }
-
+    // loop through file, line by line
+    while (getline(file, line)) {   
         stringstream stream(line);
 
-        // add data into separate variables   -- can't go in this order because order on daily reports changed starting march 27th
-        getline(stream, province, ',');
-        getline(stream, country, ',');
-        getline(stream, last_update, ',');
-        getline(stream, confirmed, ',');
-        getline(stream, deaths, ',');
-        getline(stream, recovered, ',');
+        // map column data appropriately, ex. curVal["Country"] = "USA", curVal["Deaths"] = "10"
+        indexCounter = 0;
+        while (getline(stream, val, ',')) {                                    // loop through a single line
+            if (columnsPositions.find(indexCounter) != columnsPositions.end()) {    // checks if we need current column data                
+                curVal[columnsPositions[indexCounter]] = val;                           // sets current data in curVal map
+            }
+            indexCounter++;
+        }
 
-        // TO DO
-        loop through line elements 
-            >> operator to get one token at a time
-            loop through and match each data element 
-                province, country, last_update, confirmed, deaths, recovered
-                ignore unmatched 
-        
+        // transfer data from map to strings for better readability and access time
+        province = curVal["Province"];
+        country = curVal["Country"];
+        confirmed = curVal["Confirmed"];
+        deaths = curVal["Deaths"];
+        recovered = curVal["Recovered"];
 
+        // parse line appropriately, if province is actually a city/state
+        if (province[0] == '"') {
+            province.erase(0, 1);
+            size_t pos = province.find(',');
+            province.erase(pos, 1);
+            pos = province.find('"');
+            province.erase(pos, 1);
+        }
 
         // parse special cases
         if (confirmed == "") {
@@ -206,11 +238,11 @@ void insertData(string currFile, map<string, stack<countryData>> &data) {
         }
         if (country == "Mainland China") {
             country = "China";
-        }
+        }    
 
         // Formats date once per function call 
         // (since each function call coresponds to one file, and one single date)
-        formatDate(curDate, last_update);       
+        formatDate(curDate, curVal["Last_Update"]);
 
         // CASE 1: if country IS NOT in map    -OR- 
         //         if country IS in map and NOT matching date,
@@ -224,7 +256,7 @@ void insertData(string currFile, map<string, stack<countryData>> &data) {
             N.numRecovered = stoi(recovered);
 
             // push struct into stack
-            data[country].push(N); 
+            data[country].push(N);
         }
         // CASE 2: if country is in map and matching date    
         else {
@@ -233,7 +265,8 @@ void insertData(string currFile, map<string, stack<countryData>> &data) {
             data[country].top().numDeaths += stoi(deaths);
             data[country].top().numRecovered += stoi(recovered);
         }
-    }   
+    }
+    
 }
 
 
